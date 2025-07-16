@@ -1,0 +1,102 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+-- Função utilitária para encontrar a mão direita (compatível com R6 e R15)
+local function getRightHand()
+    local hand = character:FindFirstChild("RightHand")
+    if hand then return hand end
+    return character:FindFirstChild("Right Arm")
+end
+
+-- Função para encontrar o acessório "Red Roblox Cap"
+local function getRedRobloxCap()
+    for _, acc in character:GetChildren() do
+        if acc:IsA("Accessory") and acc.Name == "Red Roblox Cap" then
+            return acc
+        end
+    end
+    return nil
+end
+
+-- Soldar o chapéu na mão
+local function weldHatToHand(hat)
+    local handle = hat:FindFirstChild("Handle")
+    local hand = getRightHand()
+    if not (handle and hand) then return nil end
+
+    -- Remove welds antigos
+    for _, w in handle:GetChildren() do
+        if w:IsA("Weld") or w:IsA("Motor6D") then
+            w:Destroy()
+        end
+    end
+
+    local weld = Instance.new("Weld")
+    weld.Name = "HatHandWeld"
+    weld.Part0 = hand
+    weld.Part1 = handle
+    weld.C0 = CFrame.new(0, -0.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
+    weld.C1 = CFrame.new()
+    weld.Parent = handle
+    handle.Anchored = false
+    return weld
+end
+
+-- Animação de ataque (swing)
+local attacking = false
+local attackTween = 0
+local attackDuration = 0.35
+local attackConnection = nil
+
+local function playAttackAnimation(weld)
+    if attacking then return end
+    attacking = true
+    attackTween = 0
+
+    -- Animação usando RenderStepped para suavidade
+    attackConnection = RunService.RenderStepped:Connect(function(dt)
+        attackTween = attackTween + dt
+        local t = math.clamp(attackTween / attackDuration, 0, 1)
+        -- Swing para frente e volta (ease in/out)
+        local swingAngle = math.sin(math.pi * t) * math.rad(120)
+        weld.C0 = CFrame.new(0, -0.5, 0) * CFrame.Angles(math.rad(90) - swingAngle, 0, 0)
+        if t >= 1 then
+            attackConnection:Disconnect()
+            weld.C0 = CFrame.new(0, -0.5, 0) * CFrame.Angles(math.rad(90), 0, 0)
+            attacking = false
+        end
+    end)
+end
+
+-- Setup inicial
+local hat = getRedRobloxCap()
+local weld = nil
+if hat then
+    weld = weldHatToHand(hat)
+end
+
+-- Se o personagem morrer/respawnar, refazer tudo
+local function onCharacterAdded(char)
+    character = char
+    humanoid = character:FindFirstChildOfClass("Humanoid")
+    hat = getRedRobloxCap()
+    if hat then
+        weld = weldHatToHand(hat)
+    end
+end
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Input para atacar
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if weld then
+            playAttackAnimation(weld)
+        end
+    end
+end)
